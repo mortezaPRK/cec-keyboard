@@ -1,21 +1,23 @@
 package main
 
 import (
+	"flag"
 	"log/slog"
-	"os"
 )
 
 func main() {
-	cfg, mapping := parseInput(os.Args)
+	var cfgPath string
+	flag.StringVar(&cfgPath, "config", "config.yaml", "Path to the configuration file")
+	flag.Func("log-level", "Set log level (debug, info, warn, error)", setLogger)
+	flag.Parse()
 
-	slog.Info("Starting CEC keyboard handler",
-		"cec-cfg", cfg,
-		"mappingCount", len(mapping),
-	)
+	config, err := LoadConfig(cfgPath)
+	panicIfErr(err, "Failed to load configuration")
 
+	slog.Info("Starting CEC keyboard handler")
 	ctx := signalAwareContext()
 
-	handler, err := newHandler(cfg, mapping)
+	handler, err := newHandler(config)
 	panicIfErr(err, "Failed to create handler")
 	defer func() { panicIfErr(handler.Close(), "Failed to close handler") }()
 

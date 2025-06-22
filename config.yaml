@@ -1,0 +1,78 @@
+adapter: "/dev/cec0"
+name: "cec-keyboard"
+type: "recording"
+mappings:
+  # Basic navigation
+  - cecCode: 0
+    actions:
+      - keyboard:
+          type: press
+          code: 1 # ESC key
+
+  - cecCode: 103 # Up button on remote with shift
+    actions:
+      - keyboard: # hold shift
+          type: down
+          code: 16
+      - keyboard:
+          type: press
+          code: 103 # Up arrow key
+      - keyboard: # release shift
+          type: up
+          code: 16
+
+  - cecCode: 108 # Down button on remote
+    actions:
+      - keyboard:
+          type: press
+          code: 108 # Down arrow key
+
+  - cecCode: 105 # Left button on remote
+    actions:
+      - keyboard:
+          type: press
+          code: 105 # Left arrow key
+
+  - cecCode: 106 # Right button on remote
+    actions:
+      - keyboard:
+          type: press
+          code: 106 # Right arrow key
+
+  - cecCode: 28 # Select/OK button on remote
+    actions:
+      - keyboard:
+          type: press
+          code: 28 # Enter key
+
+  # Mouse controls
+  - cecCode: 10 # Custom button on remote
+    actions:
+      - mouse:
+          leftClick: {}
+
+  - cecCode: 11 # Custom button on remote
+    actions:
+      - mouse:
+          rightClick: {}
+
+  # Mouse movement
+  - cecCode: 12 # Custom button on remote
+    actions:
+      - mouse:
+          moveX: 10 # Move right
+
+  - cecCode: 13 # Custom button on remote
+    actions:
+      - mouse:
+          moveX: -10 # Move left
+
+  - cecCode: 14 # Custom button on remote
+    actions:
+      - mouse:
+          moveY: 10 # Move down
+
+  - cecCode: 15 # Custom button on remote
+    actions:
+      - mouse:
+          moveY: -10 # Move up

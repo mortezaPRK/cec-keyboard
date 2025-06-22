@@ -9,34 +9,30 @@ import (
 	"github.com/sashko/go-uinput"
 )
 
-type action uint8
-
-const (
-	Press action = iota
-	Down
-	Up
-)
-
-type keyAction struct {
-	code    uint16
-	actions action
-}
-type keyMapping map[int][]keyAction
-
 type cecConfig struct {
 	Adapter string
 	Name    string
 	Type    string
+	Mapping map[int][]MappingAction
 }
 
 type handler struct {
 	k uinput.Keyboard
+	m uinput.Mice
 	c *cec.Connection
-	m keyMapping
+
+	km map[int][]MappingAction
 }
 
-func newHandler(cfg cecConfig, mapping keyMapping) (*handler, error) {
+func newHandler(cfg *cecConfig) (*handler, error) {
+	slog.Debug("Creating uinput mice")
+
+	mice, err := uinput.CreateMice(0, 0, 0, 0)
+	if err != nil {
+		return nil, errors.New("failed to create uinput mice: " + err.Error())
+	}
 	slog.Debug("Creating uinput keyboard")
+
 	keyboard, err := uinput.CreateKeyboard()
 	if err != nil {
 		return nil, errors.New("failed to create uinput keyboard: " + err.Error())
@@ -51,9 +47,10 @@ func newHandler(cfg cecConfig, mapping keyMapping) (*handler, error) {
 	slog.Debug("Devices are ready")
 
 	return &handler{
-		k: keyboard,
-		c: cecConn,
-		m: mapping,
+		k:  keyboard,
+		m:  mice,
+		c:  cecConn,
+		km: cfg.Mapping,
 	}, nil
 }
 
@@ -71,7 +68,7 @@ func (h *handler) Close() (err error) {
 
 	if h.c != nil {
 		slog.Info("Closing CEC connection")
-		err = errors.Join(err, closeCecWithTimeout(h.c))
+		err = errors.Join(err, runWithTimeout(func() { h.c.Destroy() }))
 		h.c = nil
 	}
 
@@ -90,20 +87,41 @@ func (h *handler) Do(c context.Context) {
 
 func (h *handler) onCb(keyPressed cec.KeyPress) {
 	slog.Info("Received CEC key press event", "key", keyPressed.KeyCode, "dur", keyPressed.Duration)
-	keysToSend, found := h.m[keyPressed.KeyCode]
+	actionToDo, found := h.km[keyPressed.KeyCode]
 	if !found {
 		slog.Info("Key not found in mapping", "key", keyPressed.KeyCode)
 		return
 	}
 
-	for _, k := range keysToSend {
-		switch k.actions {
-		case Press:
-			panicIfErr(h.k.KeyPress(k.code), "Failed to send key press", keyPressed.KeyCode)
-		case Down:
-			panicIfErr(h.k.KeyDown(k.code), "Failed to send key down", keyPressed.KeyCode)
-		case Up:
-			panicIfErr(h.k.KeyUp(k.code), "Failed to send key up", keyPressed.KeyCode)
+	for _, k := range actionToDo {
+		if k.Keyboard != nil {
+			switch k.Keyboard.Type {
+			case ActionPress:
+				panicIfErr(h.k.KeyPress(k.Keyboard.Code), "Failed to send key press", keyPressed.KeyCode)
+			case ActionDown:
+				panicIfErr(h.k.KeyDown(k.Keyboard.Code), "Failed to send key down", keyPressed.KeyCode)
+			case ActionUp:
+				panicIfErr(h.k.KeyUp(k.Keyboard.Code), "Failed to send key up", keyPressed.KeyCode)
+			}
+
+			continue
+		}
+
+		if k.Mouse != nil {
+			switch {
+			case k.Mouse.LeftClick != nil:
+				panicIfErr(h.m.LeftClick(), "Failed to press left button", keyPressed.KeyCode)
+			case k.Mouse.RightClick != nil:
+				panicIfErr(h.m.RightClick(), "Failed to press right button", keyPressed.KeyCode)
+			case k.Mouse.MiddleClick != nil:
+				panicIfErr(h.m.MiddleClick(), "Failed to press middle button", keyPressed.KeyCode)
+			case k.Mouse.SideClick != nil:
+				panicIfErr(h.m.SideClick(), "Failed to press side button", keyPressed.KeyCode)
+			case k.Mouse.MoveX != nil:
+				panicIfErr(h.m.MoveX(*k.Mouse.MoveX), "Failed to move mice X", *k.Mouse.MoveX)
+			case k.Mouse.MoveY != nil:
+				panicIfErr(h.m.MoveY(*k.Mouse.MoveY), "Failed to move mice Y", *k.Mouse.MoveY)
+			}
 		}
 	}
 }
