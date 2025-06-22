@@ -5,9 +5,8 @@ import (
 	"errors"
 	"log/slog"
 
+	"github.com/mortezaPRK/cec-keyboard/cec"
 	"github.com/sashko/go-uinput"
-
-	"github.com/robbiet480/cec"
 )
 
 type action uint8
@@ -34,23 +33,28 @@ type handler struct {
 	k uinput.Keyboard
 	c *cec.Connection
 	m keyMapping
-
-	readyForEvents chan struct{}
 }
 
-func newHandler(cfg cecConfig, mapping keyMapping) *handler {
-	h := &handler{m: mapping, readyForEvents: make(chan struct{})}
-
+func newHandler(cfg cecConfig, mapping keyMapping) (*handler, error) {
 	slog.Debug("Creating uinput keyboard")
 	keyboard, err := uinput.CreateKeyboard()
-	panicIfErr(err, "Failed to create uinput keyboard")
+	if err != nil {
+		return nil, errors.New("failed to create uinput keyboard: " + err.Error())
+	}
 
-	h.k = keyboard
-	h.c = createCecWithTimeout(h.readyForEvents, cfg)
+	slog.Debug("Opening CEC connection", "adapter", cfg.Adapter, "name", cfg.Name, "type", cfg.Type)
+	cecConn, err := cec.Open(cfg.Adapter, cfg.Name, cfg.Type)
+	if err != nil {
+		return nil, errors.New("failed to open CEC connection: " + err.Error())
+	}
 
 	slog.Debug("Devices are ready")
 
-	return h
+	return &handler{
+		k: keyboard,
+		c: cecConn,
+		m: mapping,
+	}, nil
 }
 
 func (h *handler) Close() (err error) {
@@ -75,29 +79,17 @@ func (h *handler) Close() (err error) {
 }
 
 func (h *handler) Do(c context.Context) {
-	slog.Debug("Starting Loop, closing the dummy channel receiver")
-	close(h.readyForEvents)
-	slog.Debug("Waiting for CEC events")
+	slog.Info("Starting CEC event handler")
+	cec.CallbackEvent = h.onCb
 
-	for {
-		select {
-		case <-c.Done():
-			slog.Info("Context done, exiting handler loop")
-			return
-		case e := <-cec.CallbackEvents:
-			slog.Debug("Received CEC event", "event", e)
-			h.onCb(e)
-		}
-	}
+	<-c.Done()
+	slog.Info("Stopping CEC event handler")
+
+	cec.CallbackEvent = nil
 }
 
-func (h *handler) onCb(e any) {
-	keyPressed, ok := e.(cec.KeyPress)
-	if !ok {
-		slog.Debug("Received non-KeyPress event", "event", e)
-		return
-	}
-
+func (h *handler) onCb(keyPressed cec.KeyPress) {
+	slog.Info("Received CEC key press event", "key", keyPressed.KeyCode, "dur", keyPressed.Duration)
 	keysToSend, found := h.m[keyPressed.KeyCode]
 	if !found {
 		slog.Info("Key not found in mapping", "key", keyPressed.KeyCode)

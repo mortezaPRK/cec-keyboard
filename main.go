@@ -15,7 +15,8 @@ func main() {
 
 	ctx := signalAwareContext()
 
-	handler := newHandler(cfg, mapping)
+	handler, err := newHandler(cfg, mapping)
+	panicIfErr(err, "Failed to create handler")
 	defer func() { panicIfErr(handler.Close(), "Failed to close handler") }()
 
 	slog.Info("Handler created successfully, starting CEC connection")

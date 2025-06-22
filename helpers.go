@@ -8,11 +8,10 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
-	"github.com/robbiet480/cec"
+	"github.com/mortezaPRK/cec-keyboard/cec"
 )
 
 func closeCecWithTimeout(c *cec.Connection) error {
@@ -74,7 +73,7 @@ func parseInput(args []string) (cecConfig, keyMapping) {
 		return nil
 	})
 
-	flag.Parse()
+	flag.CommandLine.Parse(args[1:])
 
 	return cecConfig{
 		Adapter: adapter,
@@ -112,50 +111,4 @@ func panicIf(condition bool, msg string, args ...any) {
 	if condition {
 		panic(fmt.Sprintf(msg, args...))
 	}
-}
-
-// This function solely exists to ensure that a connection is created to CEC without blocking the main goroutine.
-//
-//	There are two main reasons for this:
-//
-// 1. The CEC library requires a receiver for the event channel to avoid blocking.
-// 2. Timeouts are necessary to prevent the program from hanging indefinitely if the CEC connection cannot be established.
-func createCecWithTimeout(
-	readyForEvents <-chan struct{},
-	cfg cecConfig,
-) *cec.Connection {
-	var mu sync.Mutex
-
-	// Without this, opening a connection will stuck since there is no receiver for the event channel.
-	mu.Lock()
-	go func() {
-		mu.Unlock()
-		slog.Debug("Waiting for CEC events before processing")
-		timeout := time.After(20 * time.Second)
-		for {
-			select {
-			case <-readyForEvents:
-				slog.Debug("Ready for CEC events")
-				return
-			case <-cec.CallbackEvents:
-				slog.Debug("Received CEC event, but not ready for events yet")
-				// Consume events to prevent blocking.
-				// This is a workaround to avoid blocking the CEC event channel.
-			case <-timeout:
-				slog.Warn("Timeout waiting for CEC events, no receiver ready")
-				panic("Timeout waiting for CEC events, no receiver ready")
-			}
-		}
-	}()
-
-	// Make sure the above goroutine has started before proceeding to open the CEC connection.
-	mu.Lock()
-	defer mu.Unlock()
-	time.Sleep(5 * time.Second)
-
-	slog.Debug("Opening CEC connection", "adapter", cfg.Adapter, "name", cfg.Name, "type", cfg.Type)
-	cecConn, err := cec.Open(cfg.Adapter, cfg.Name, cfg.Type)
-	panicIfErr(err, "failed to open CEC connection", "adapter", cfg.Adapter, "name", cfg.Name, "type", cfg.Type)
-
-	return cecConn
 }
