@@ -1,0 +1,55 @@
+name: Publish
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    strategy:
+      fail-fast: true
+      matrix:
+        platforms:
+          - name: linux_amd64
+            platform: linux/amd64
+          - name: linux_arm64
+            platform: linux/arm64
+          - name: linux_arm_v7
+            platform: linux/arm/v7
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: cec-keyboard_${{ matrix.platforms.name }}:latest
+          platforms: ${{ matrix.platforms.platform }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          target: builder
+
+      - name: Prepare Release
+        run: |
+          mkdir -p built
+          id=$(docker container create --platform=${{ matrix.platforms.platform }} cec-keyboard_${{ matrix.platforms.name }}:latest)
+          docker cp $id:/app/cec-keyboard built/cec-keyboard_${{ matrix.platforms.name }}
+          docker rm -v $id
+
+      - name: Upload Release Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: built/cec-keyboard_${{ matrix.platforms.name }}
