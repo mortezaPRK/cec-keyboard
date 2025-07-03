@@ -1,10 +1,13 @@
-FROM golang:1.24 AS base
+ARG BASE_IMAGE_VERSION
+FROM debian:${BASE_IMAGE_VERSION} AS base
 
 RUN apt update && \
-    apt install -y libcec-dev libp8-platform-dev libudev-dev && \
+    apt install -y libcec-dev libp8-platform-dev libudev-dev ca-certificates pkg-config gcc g++ && \
     rm -rf /var/lib/apt/lists/*
 
-    
+COPY --from=golang:1.24 /usr/local/go/ /usr/local/go/
+ENV PATH="/usr/local/go/bin:${PATH}"
+
 FROM base AS builder
     
 WORKDIR /app

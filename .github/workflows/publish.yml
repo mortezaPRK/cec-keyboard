@@ -11,8 +11,9 @@ jobs:
       contents: write
 
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
+        base_image: [trixie, bookworm]
         platforms:
           - name: linux_amd64
             platform: linux/amd64
@@ -36,20 +37,22 @@ jobs:
         with:
           context: .
           load: true
-          tags: cec-keyboard_${{ matrix.platforms.name }}:latest
+          tags: cec-keyboard_${{ matrix.base_image }}_${{ matrix.platforms.name }}:latest
           platforms: ${{ matrix.platforms.platform }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           target: builder
+          build-args: |
+            BASE_IMAGE_VERSION=${{ matrix.base_image }}
 
       - name: Prepare Release
         run: |
           mkdir -p built
-          id=$(docker container create --platform=${{ matrix.platforms.platform }} cec-keyboard_${{ matrix.platforms.name }}:latest)
-          docker cp $id:/app/cec-keyboard built/cec-keyboard_${{ matrix.platforms.name }}
+          id=$(docker container create --platform=${{ matrix.platforms.platform }} cec-keyboard_${{ matrix.base_image }}_${{ matrix.platforms.name }}:latest)
+          docker cp $id:/app/cec-keyboard built/cec-keyboard_${{ matrix.base_image }}_${{ matrix.platforms.name }}
           docker rm -v $id
 
       - name: Upload Release Assets
         uses: softprops/action-gh-release@v2
         with:
-          files: built/cec-keyboard_${{ matrix.platforms.name }}
+          files: built/cec-keyboard_${{ matrix.base_image }}_${{ matrix.platforms.name }}
