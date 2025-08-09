@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        base_image: [trixie, bookworm]
+        base_image: [trixie, bookworm, sid]
         platforms:
           - name: linux_amd64
             platform: linux/amd64
